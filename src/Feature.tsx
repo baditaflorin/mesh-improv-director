@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import {
+  MeshButton,
+  MeshLaunch,
   MeshNameInput,
+  MeshPresence,
+  MeshStatusPill,
+  MeshSurface,
   useNamedPeer,
   useRoster,
   useSharedCollection,
@@ -96,6 +101,7 @@ export function Feature({ room, config }: Props) {
     currentDirection?.action === "activate" && currentDirection.cueId
       ? cues.byId(currentDirection.cueId)
       : undefined;
+  const performerCount = Math.max(1, roster.present.length);
 
   const direct = (cueId: string | null, action: Direction["action"]) => {
     if (!room) return;
@@ -146,131 +152,193 @@ export function Feature({ room, config }: Props) {
     else setNotice("Add a cue first, then the director can take it to the stage.");
   };
 
+  const focusComposer = () => {
+    document.getElementById("composer-title")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    document.querySelector<HTMLTextAreaElement>("#cue-premise")?.focus();
+  };
+
+  const launchPrimaryAction = currentCue
+    ? {
+        label: cues.items.length > 1 ? "Take next cue" : "Add another cue",
+        onClick: cues.items.length > 1 ? takeNext : focusComposer,
+        disabled: !room,
+      }
+    : {
+        label: "Start a warm-up",
+        onClick: () => addExample(EXAMPLES[0]!),
+        disabled: !room,
+      };
+
+  const launchSecondaryAction = currentCue
+    ? {
+        label: "Clear stage",
+        onClick: () => direct(null, "clear"),
+        disabled: !room,
+      }
+    : { label: "Write a cue", onClick: focusComposer };
+
   return (
     <main className="director-shell">
-      <header className="director-header">
-        <p className="eyebrow">A shared rehearsal room</p>
-        <h1>Improv Director</h1>
-        <p className="lede">
-          One calm, shared cue at a time. Add offers, direct the scene, and keep every performer on
-          the same page.
-        </p>
-        <p className="connection" aria-live="polite">
-          {room
-            ? `${roster.present.length || 1} performer${(roster.present.length || 1) === 1 ? "" : "s"} here`
-            : "Connecting to the room…"}
-        </p>
-      </header>
+      <MeshLaunch
+        className="director-launch"
+        eyebrow="A shared rehearsal room"
+        heading="Improv Director"
+        promise="One calm, shared cue at a time. Shape the scene together without a host, account, or distracting control room."
+        presence={
+          <MeshPresence
+            count={performerCount}
+            state={room ? "connected" : "connecting"}
+            label={performerCount === 1 ? "performer in this room" : "performers in this room"}
+            announce="polite"
+          />
+        }
+        preview={
+          <section className="rehearsal-stage" aria-labelledby="stage-title">
+            <div className="rehearsal-stage-meta">
+              <MeshStatusPill tone={currentCue ? "live" : "neutral"} dot>
+                {currentCue ? "On stage now" : "Stage is open"}
+              </MeshStatusPill>
+              <span>
+                {currentCue ? `Directed by ${currentDirection?.author}` : "Ready for an offer"}
+              </span>
+            </div>
+            {currentCue ? (
+              <>
+                <h2 id="stage-title">{currentCue.premise}</h2>
+                <p>{currentCue.instruction}</p>
+              </>
+            ) : (
+              <>
+                <h2 id="stage-title">The stage is open</h2>
+                <p>Start a warm-up, or write a cue that gives everyone the same first offer.</p>
+              </>
+            )}
+          </section>
+        }
+        primaryAction={launchPrimaryAction}
+        secondaryAction={launchSecondaryAction}
+        loading={!room}
+        connectionHint={
+          room
+            ? undefined
+            : "Connecting to the rehearsal room. The stage remains visible while it joins."
+        }
+      />
 
-      <section className="stage" aria-labelledby="stage-title">
-        <div className="stage-label">
-          <span aria-hidden="true">●</span> On stage now
-        </div>
-        {currentCue ? (
-          <div className="current-cue">
-            <h2 id="stage-title">{currentCue.premise}</h2>
-            <p>{currentCue.instruction}</p>
-            <small>Directed by {currentDirection?.author}</small>
+      <div className="director-workbench">
+        <MeshSurface
+          as="section"
+          className="composer"
+          tone="raised"
+          padding="lg"
+          aria-labelledby="composer-title"
+        >
+          <div className="section-heading">
+            <p className="eyebrow">Write an offer</p>
+            <h2 id="composer-title">Give the room a clear next move</h2>
+            <p>Premise first. Then add one playable direction that keeps the ensemble listening.</p>
           </div>
-        ) : (
-          <div className="empty-stage">
-            <h2 id="stage-title">The stage is open</h2>
-            <p>
-              Add a cue below, or choose a warm-up cue, to give everyone the same starting point.
-            </p>
-          </div>
-        )}
-        <div className="stage-actions">
-          <button type="button" className="primary" onClick={takeNext}>
-            Take next cue
-          </button>
-          <button
-            type="button"
-            className="quiet"
-            onClick={() => direct(null, "clear")}
-            disabled={!room || !currentCue}
+          <form onSubmit={addCue}>
+            <label htmlFor="cue-premise">
+              Premise
+              <textarea
+                id="cue-premise"
+                value={premise}
+                onChange={(event) => setPremise(event.target.value)}
+                maxLength={160}
+                placeholder="Where are we, and what just changed?"
+                required
+              />
+            </label>
+            <label htmlFor="cue-direction">
+              Direction
+              <textarea
+                id="cue-direction"
+                value={instruction}
+                onChange={(event) => setInstruction(event.target.value)}
+                maxLength={220}
+                placeholder="A short note to focus the scene."
+                required
+              />
+            </label>
+            <MeshButton type="submit" size="lg" fullWidth disabled={!room}>
+              Add cue and direct it
+            </MeshButton>
+          </form>
+          <p className="notice" role="status" aria-live="polite">
+            {notice}
+          </p>
+        </MeshSurface>
+
+        <div className="director-sidebar">
+          <MeshSurface
+            as="section"
+            className="identity"
+            tone="quiet"
+            padding="md"
+            aria-labelledby="identity-title"
           >
-            Clear stage
-          </button>
-        </div>
-      </section>
-
-      <section className="identity" aria-labelledby="identity-title">
-        <div>
-          <h2 id="identity-title">Your rehearsal name</h2>
-          <p>Shown beside directions; it stays in your browser and this room.</p>
-        </div>
-        <MeshNameInput
-          value={name}
-          onChange={setName}
-          ariaLabel="Your rehearsal name"
-          placeholder="e.g. Sam"
-          maxLength={48}
-        />
-      </section>
-
-      <section className="composer" aria-labelledby="composer-title">
-        <div className="section-heading">
-          <p className="eyebrow">Add an offer</p>
-          <h2 id="composer-title">Write the next cue</h2>
-        </div>
-        <form onSubmit={addCue}>
-          <label>
-            Premise
-            <textarea
-              value={premise}
-              onChange={(event) => setPremise(event.target.value)}
-              maxLength={160}
-              placeholder="Where are we, and what just changed?"
-              required
+            <div>
+              <p className="eyebrow">You are playing as</p>
+              <h2 id="identity-title">{name || "Unnamed performer"}</h2>
+              <p>Shown beside directions in this room only.</p>
+            </div>
+            <MeshNameInput
+              value={name}
+              onChange={setName}
+              ariaLabel="Your rehearsal name"
+              placeholder="e.g. Sam"
+              maxLength={48}
             />
-          </label>
-          <label>
-            Direction
-            <textarea
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-              maxLength={220}
-              placeholder="A short note to focus the scene."
-              required
-            />
-          </label>
-          <button className="primary" type="submit" disabled={!room}>
-            Add cue and direct it
-          </button>
-        </form>
-        <p className="notice" role="status" aria-live="polite">
-          {notice}
-        </p>
-      </section>
+          </MeshSurface>
 
-      <section className="warmups" aria-labelledby="warmups-title">
-        <h2 id="warmups-title">Quick warm-up cues</h2>
-        <div className="example-grid">
-          {EXAMPLES.map((example) => (
-            <button
-              type="button"
-              key={example.premise}
-              onClick={() => addExample(example)}
-              disabled={!room}
-            >
-              <strong>{example.premise}</strong>
-              <span>{example.instruction}</span>
-            </button>
-          ))}
+          <MeshSurface
+            as="section"
+            className="warmups"
+            tone="quiet"
+            padding="md"
+            aria-labelledby="warmups-title"
+          >
+            <p className="eyebrow">Warm up together</p>
+            <h2 id="warmups-title">Three useful starts</h2>
+            <div className="example-grid">
+              {EXAMPLES.map((example) => (
+                <button
+                  type="button"
+                  key={example.premise}
+                  onClick={() => addExample(example)}
+                  disabled={!room}
+                >
+                  <strong>{example.premise}</strong>
+                  <span>{example.instruction}</span>
+                </button>
+              ))}
+            </div>
+          </MeshSurface>
         </div>
-      </section>
+      </div>
 
-      <section className="cue-list" aria-labelledby="cue-list-title">
+      <MeshSurface
+        as="section"
+        className="cue-list"
+        tone="base"
+        padding="lg"
+        aria-labelledby="cue-list-title"
+      >
         <div className="list-heading">
           <div>
-            <p className="eyebrow">Shared deck</p>
-            <h2 id="cue-list-title">All cues</h2>
+            <p className="eyebrow">Shared cue deck</p>
+            <h2 id="cue-list-title">Keep the room in motion</h2>
           </div>
-          <span>{cues.items.length} total</span>
+          <MeshStatusPill tone="neutral">{cues.items.length} saved</MeshStatusPill>
         </div>
         {cues.items.length === 0 ? (
-          <p className="empty-list">No saved cues yet. Warm-up cues are a good first offer.</p>
+          <p className="empty-list">
+            No saved cues yet. Start with a warm-up or add the first offer.
+          </p>
         ) : (
           <ol>
             {cues.items.map((cue) => (
@@ -281,23 +349,28 @@ export function Feature({ room, config }: Props) {
                   <small>Added by {cue.author}</small>
                 </div>
                 <div className="cue-actions">
-                  <button type="button" onClick={() => direct(cue.id, "activate")} disabled={!room}>
+                  <MeshButton
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => direct(cue.id, "activate")}
+                    disabled={!room}
+                  >
                     Direct
-                  </button>
-                  <button
-                    type="button"
-                    className="remove"
+                  </MeshButton>
+                  <MeshButton
+                    size="sm"
+                    variant="quiet"
                     onClick={() => cues.remove(cue.id)}
                     disabled={!room}
                   >
                     Remove
-                  </button>
+                  </MeshButton>
                 </div>
               </li>
             ))}
           </ol>
         )}
-      </section>
+      </MeshSurface>
 
       <footer className="privacy-note">
         Browser-local peer collaboration. No accounts, analytics, camera, microphone, or scene

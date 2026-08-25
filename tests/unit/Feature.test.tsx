@@ -10,11 +10,14 @@ describe("Feature (component)", () => {
     render(<Feature room={room} config={config} />);
     expect(screen.getByRole("heading", { name: "Improv Director" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "The stage is open" })).toBeInTheDocument();
+    expect(document.querySelector(".director-launch")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Launch actions" })).toBeInTheDocument();
   });
 
   it("shows a connecting state when room is null", () => {
     render(<Feature room={null} config={config} />);
-    expect(screen.getByText("Connecting to the room…")).toBeInTheDocument();
+    expect(screen.getByText(/connecting to the rehearsal room/i)).toBeInTheDocument();
+    expect(screen.getByText(/stage remains visible/i)).toBeInTheDocument();
   });
 
   it("accepts only bounded cue and direction records", () => {
